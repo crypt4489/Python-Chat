@@ -6,10 +6,22 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk, GdkPixbuf
 from multiprocessing import Process, JoinableQueue
 from pyChatMessageClass import gMessage
-import threading
+import threading, sys
 
 
 class chatGUI(Gtk.Window, Process, object):
+
+
+
+
+	def update_friends_list(self):
+		green_image = GdkPixbuf.Pixbuf.new_from_file_at_size(self.active_user["link"], self.active_user["width"], self.active_user["height"])
+		red_image = GdkPixbuf.Pixbuf.new_from_file_at_size(self.inactive_user["link"], self.inactive_user["width"], self.inactive_user["height"])
+		self.friends_list.clear()
+		self.friends_list.append(list(("Drew", green_image)))
+		self.friends_list.append(list(("Name1", red_image)))
+		
+		self.treeview.set_model(self.friends_list)
 
 
 	def sendMsg(self, widget):
@@ -35,27 +47,34 @@ class chatGUI(Gtk.Window, Process, object):
 				while(self.queue2.empty()):
 					pass
 				if (self.notebook.get_current_page() == 0):
-					first_chat = self.chat_buf.get_end_iter()
-					self.chat_buf.insert(first_chat, "Server: " + self.queue2.get() + "\n")
+					res = self.queue2.get()
+					if (res.header["alert"] == True):
+						self.update_friends_list()
+					else:
+						first_chat = self.chat_buf.get_end_iter()
+						self.chat_buf.insert(first_chat, "Server: " + res.data + "\n")
 				else:
-					self.interact_buf.insert(self.interact_buf.get_end_iter(), self.queue2.get())
+					oneEnd = self.interact_buf.get_end_iter()
+					data = self.queue2.get().data
+					self.interact_buf.insert(oneEnd, data)
+					
 				self.queue2.task_done()
+				
 			except:
-				print("ERROR: something went wrong with gui.recv")
+				print("ERROR: something went wrong with gui.recv" + str(sys.exc_info()[0]) + str(sys.exc_info()[1]) )
 
 	
 	def setup_tel(self, widget):
 		data = (self.ip_buf.get_text(), self.usr_buf.get_text(), self.pwd_buf.get_text())
 		self.pwd_buf.delete_text(0, -1)
-		print(data)
 		self.queue1.put(gMessage(False, False, True, False, data))
 
 	def send_cmd(self, widget):
-		first_in = self.interact_buf.get_start_iter()
+		
+		first_in_iter = self.interact_buf.get_start_iter()
 		last_in = self.interact_buf.get_end_iter()
-		data = str(self.interact_buf.get_text(first_in, last_in, False).split("\n")[0])
-		self.interact_buf.delete(first_in, last_in)
-		self.interact_buf.place_cursor(first_in)
+		data = str(self.interact_buf.get_text(first_in_iter, last_in, False).split("\n")[0])
+	
 		self.queue1.put(gMessage(False, False, False, True, data))
 
 
@@ -63,6 +82,13 @@ class chatGUI(Gtk.Window, Process, object):
 		self.queue1.put(gMessage(True, False, False, False, ""))
 		self.destroy()
 		Gtk.main_quit()
+
+	def clear(self, widget):
+		first_in = self.interact_buf.get_start_iter()
+		last_in = self.interact_buf.get_end_iter()
+		self.interact_buf.delete(first_in, last_in)
+		self.interact_buf.place_cursor(first_in)		
+
 
 	def setup_chat_page(self):
 		self.main_chat = Gtk.Grid(column_homogeneous = True, column_spacing = 5, 						row_spacing = 5)
@@ -102,7 +128,7 @@ class chatGUI(Gtk.Window, Process, object):
 		self.main_chat.attach(self.button, 2, 2, 2, 2)
 			
 		#create friends list listview
-		self.image = GdkPixbuf.Pixbuf.new_from_file_at_size("/home/crypt4489/Desktop/red-dot.ico", 24, 24)
+		self.image = GdkPixbuf.Pixbuf.new_from_file_at_size(self.inactive_user["link"], self.inactive_user["width"], self.inactive_user["height"])
 		self.friends_list = Gtk.ListStore(str, GdkPixbuf.Pixbuf)
 		self.friends_list.append(list(("Drew", self.image)))
 		self.friends_list.append(list(("Sean", self.image)))
@@ -153,7 +179,10 @@ class chatGUI(Gtk.Window, Process, object):
 		self.page2.attach(scrolledwindow, 0, 4, 4, 1)
 		self.tel_button2 = Gtk.Button(label="Send Command")
 		self.tel_button2.connect("clicked", self.send_cmd) 
-		self.page2.attach(self.tel_button2, 4, 4, 1, 1)
+		self.tel_button3 = Gtk.Button(label="Clear")
+		self.tel_button3.connect("clicked", self.clear) 
+		self.page2.attach(self.tel_button2, 4, 3, 1, 1)
+		self.page2.attach(self.tel_button3, 4, 4, 1, 1)
 		
 
 
@@ -162,6 +191,10 @@ class chatGUI(Gtk.Window, Process, object):
 		Process.__init__(self)
 		self.queue1 = queue1
 		self.queue2 = queue2
+		self.active_user = {"link": "/home/crypt4489/Documents/pyChatFiles/icons/Green.ico", "width": 16, "height": 16}
+
+
+		self.inactive_user = {"link": "/home/crypt4489/Documents/pyChatFiles/icons/red-dot.ico", "width": 24, "height": 24}
 		Gtk.Window.__init__(self, title="Drew Chat")
 		self.set_size_request(800, 600)
 		self.timeout_id = None

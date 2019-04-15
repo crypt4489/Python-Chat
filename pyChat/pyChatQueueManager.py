@@ -18,9 +18,6 @@ class pyChatManager(BaseManager, object):
 			while(self.messQueue.empty()):
 				pass
 			dataM = self.messQueue.get()
-			if (type(dataM) == str):
-				self.GUIdataqueue.put(dataM)
-				pass
 			if (dataM.messageType == "gui_msg"):
 				if (dataM.dataMsg == True):
 					args = messageFormat.quickMess["DATA_MSG"]
@@ -30,12 +27,11 @@ class pyChatManager(BaseManager, object):
 				elif (dataM.quit == True):
 					args = messageFormat.quickMess["END_CONN"]
 					self.client.sendMsg(dMessage(**args).makePickle())
-					self.client.end_tellie()
 				elif (dataM.telnet == True):
 					self.client.tellie(dataM.data)
 				elif (dataM.cmd == True):
 					self.client.cmd_tel(dataM.data)
 			else:
-				self.GUIdataqueue.put(dataM.data)
+				self.GUIdataqueue.put(dataM)
 
 

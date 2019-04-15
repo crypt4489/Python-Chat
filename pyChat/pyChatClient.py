@@ -3,10 +3,12 @@ import time
 import io
 import threading
 import sys
+import select
 import pickle
 import telnetlib
-from pyChatMessageClass import dMessage
+from pyChatMessageClass import dMessage, gMessage
 from  multiprocessing import Process, JoinableQueue
+from io import BytesIO
 
 
 class Client(Process, object):
@@ -23,8 +25,11 @@ class Client(Process, object):
 	def recvMsg(self):
 		try:
 			while True:
-				data = self.sock.recv(1024)
-				self.queue1.put(dMessage.makeMessage(data))
+				data = self.sock.recv(4096)
+				if not data:
+					break
+				message = dMessage.makeMessage(data)
+				self.queue1.put(message)
 		except:
 			print(str(sys.exc_info()[0]) + " RECV_MSG_CLIENT_CHAT")
 
@@ -33,28 +38,45 @@ class Client(Process, object):
 			self.tel_connect = telnetlib.Telnet(tel_info[0])
 			self.tel_connect.read_until("Password: ")
 			self.tel_connect.write(tel_info[2] + "\n\r")
-			#self.tel_connect.close()
 			print("Success with TELLIE")
-			self.tel_connect.interact()
+			
+			
+			self.readThread = threading.Thread(target=self.read_tel)
+			self.readThread.daemon = True
+			self.readThread.start()
 		except:
 			print("Something wrong w/ tellie " + str(sys.exc_info()[0]) + "\n")
 
-	def cmd_tel(self, cmd):
-		self.tel_connect.write(cmd + "\n\r")
-		self.tel_connect.write("exit\n\r")
-		ret_data = self.tel_connect.read_all()
-		print(ret_data)
-		self.queue1.put(dMessage(0, "", 0, 0, ret_data))
+	def read_tel(self):
+		while True:
+			rfd, wfd, xfd = select.select([self.tel_connect], [], [])
+			try:
+				if self.tel_connect in rfd:
+					data = self.tel_connect.read_eager()
+					if data:
+						self.queue1.put(dMessage(0, "", 0, 0, 0, data))
+			except EOFError:
+				print("Something wrong w/ tellie receive " + str(sys.exc_info()[0]) + "\n")
+				break;
 
-	def end_tellie(self):
-		self.tel_connect.close()
+
+	def cmd_tel(self, cmd):
+		
+		
+		self.tel_connect.write(cmd + "\n\r")
+		#ret_data = self.tel_connect.read_eager()
+		#self.queue1.put(dMessage(0, "", 0, 0, 0, "lol"))
 		
 
+	def end_tellie(self):
+		self.readThread.stop()
+		self.tel_connect.close()
+		
 	def __init__(self, address, target, queue1):
 		Process.__init__(self)
 		self.queue1 = queue1
 		self.sock.connect((address, 9000))
-		self.sock.sendall(dMessage(1, "UBUNTU!", 0, 0, "UBUNTU!").makePickle())
+		self.sock.sendall(dMessage(1, "UBUNTU!", 0, 0, 0, "UBUNTU!").makePickle())
 		"""print(str(self.sock.recv(1024)))
 		while(str(self.sock.recv(1024)) != "Send"):
 			pass

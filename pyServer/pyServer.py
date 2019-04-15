@@ -2,16 +2,10 @@ import SocketServer
 import threading
 import pickle
 import sys
-from pyChatMessageClass import dMessage
+from pyChatMessageClass import dMessage, messageFormat
+from pyServerSQL import check_if_db_exists, create_user
 
-class myTCPHandler(SocketServer.BaseRequestHandler):
 
-	def handle(self):
-			message = dMessage.makeMessage(self.request.recv(4096))
-			sock = self.request
-			addr = self.client_address
-			server_manager = ServerManager()
-			server_manager.process_init(sock, addr, message)
 
 
 class ServerManager:
@@ -35,11 +29,25 @@ class ServerManager:
 			self.known_conns[usr_Name] = sock
 			self.known_ips[usr_Name] = addr[0]
 			self.active_users[addr[0]] = True
+			create_user(addr[0], usr_Name)
 			if (usr_Name != "SERVER"):
 				print("Client")
 				self.manageClient(addr, sock)
 			else:
+				self.alert_active_users(usr_Name, addr)
 				self.manageClient(addr, sock)
+
+	def alert_active_users(self, usrName, addr):
+		args = messageFormat.quickMess["ALERT_ONLINE"]
+		args["data"] = (usrName, addr)
+		message = dMessage(**args)
+		print(message.header)
+		for name, addr in self.known_ips.iteritems():
+			print((name, addr))
+			self.known_conns[name].sendall(dMessage(**args).makePickle())
+			
+
+
 
 
 	def handleServ(self, addr, sock):
@@ -50,7 +58,7 @@ class ServerManager:
 				break
 			for i, v in self.known_ips.iteritems():
 				if (v != addr[0]):
-					self.known_conns[i].send(dMessage(False, False, data).makePickle())
+					self.known_conns[i].send(dMessage(False, None, False, True, data, False).makePickle())
 				else:
 					self.known_conns[i].sendall(str(data))
 
@@ -60,11 +68,7 @@ class ServerManager:
 			try:
 				while self.active_users[addr[0]] == True:
 					data = sock.recv(4096)
-					if not data:
-						break
 					message = dMessage.makeMessage(data)
-					print(message.data)
-					print(message)
 					for i, v in message.header.iteritems():
 						if i == "chat":
 							self.message_map[i](message, addr)
@@ -81,12 +85,23 @@ class ServerManager:
 
 
 	def send_data(self, message, addr):
+		
 		self.known_conns[message.target].sendall(message.makePickle())
 
 
 	def handle_end(self, message, addr):
 		self.active_users[addr[0]] = False
 		print "{}".format(active_users)
+
+
+class myTCPHandler(SocketServer.BaseRequestHandler):
+
+	def handle(self):
+			message = dMessage.makeMessage(self.request.recv(4096))
+			sock = self.request
+			addr = self.client_address
+			self.server_manager = ServerManager()
+			self.server_manager.process_init(sock, addr, message)
 
 class Server(SocketServer.ThreadingMixIn, SocketServer.TCPServer):
 
@@ -110,6 +125,7 @@ class Server(SocketServer.ThreadingMixIn, SocketServer.TCPServer):
 if __name__ == "__main__":
 	server = Server()
 	print(server.server_address)
+	check_if_db_exists()
 	s_thread = threading.Thread(target=server.serve_forever)
 	s_thread.setDaemon(True)
 	s_thread.start()

@@ -25,9 +25,9 @@ class dMessage(messageMethods, object):
 
 	messageType = "srv_msg"
 
-	def __init__  (self, conn, target, end, sendMsg, data):
+	def __init__  (self, conn, target, end, sendMsg, alert, data):
 
-		self.header = {"conn": conn, "end": end, "chat": sendMsg}
+		self.header = {"conn": conn, "end": end, "chat": sendMsg, "alert": alert}
 		self.data = data
 		self.target = target
 
@@ -47,11 +47,8 @@ class gMessage(messageMethods, object):
 
 class messageFormat():
 
-	quickMess = { "DATA_MSG" : {"conn" : False, "target": None, "end" : False, "sendMsg" : True, "data" : None}, 
-		      "NEW_CONN" : {"conn" : True, "target" : None, "end" : False, "sendMsg" : False, "data" : None}, 
-                      "END_CONN" : {"conn" : False, "target" : None, "end" : True, "sendMsg" : False, "data" : None}  }
-
-
-
-
+	quickMess = { "DATA_MSG" : {"conn" : False, "target": None, "end" : False, "sendMsg" : True, "alert" : False, "data" : None}, 
+		      "NEW_CONN" : {"conn" : True, "target" : None, "end" : False, "sendMsg" : False, "alert" : False, "data" : None}, 
+                      "END_CONN" : {"conn" : False, "target" : None, "end" : True, "sendMsg" : False, "alert" : False, "data" : None},
+		     "ALERT_ONLINE" : {"conn" : False, "target" : None, "end" : False, "sendMsg" : False, "alert" : True, "data" : None}   }
 
