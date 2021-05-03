@@ -14,12 +14,13 @@ class chatGUI(Gtk.Window, Process, object):
 
 
 
-	def update_friends_list(self):
+	def update_friends_list(self, msg):
 		green_image = GdkPixbuf.Pixbuf.new_from_file_at_size(self.active_user["link"], self.active_user["width"], self.active_user["height"])
 		red_image = GdkPixbuf.Pixbuf.new_from_file_at_size(self.inactive_user["link"], self.inactive_user["width"], self.inactive_user["height"])
 		self.friends_list.clear()
 		self.friends_list.append(list(("Drew", green_image)))
-		self.friends_list.append(list(("Name1", red_image)))
+		#store all values in shallow copy
+		self.friends_list.append(list(("Derrick", red_image)))
 		
 		self.treeview.set_model(self.friends_list)
 
@@ -29,16 +30,19 @@ class chatGUI(Gtk.Window, Process, object):
 			first_in = self.input_buf.get_start_iter()
 			last_in = self.input_buf.get_end_iter()
 			first_chat = self.chat_buf.get_end_iter()
-			data = str(self.input_buf.get_text(first_in, last_in, False).split("\n")[0])
-			if not data:
+			buffer_data = str(self.input_buf.get_text(first_in, last_in, False).split("\n")[0])
+			if not buffer_data:
 				return
-			self.queue1.put(gMessage(False, True, False, False, data))
-			self.chat_buf.insert(first_chat, "You: " +data+"\n", length=-1)
+			#find named in list and assign to message
+			mess_data = {"target": self.selected_target, "data": buffer_data}
+			print(mess_data)
+			self.queue1.put(gMessage(False, True, False, False, mess_data))
+			self.chat_buf.insert(first_chat, "You: " +buffer_data+"\n", length=-1)
 			self.input_buf.delete(first_in, last_in)
 			self.input_buf.place_cursor(first_in)
 			return 'break'
 		except:
-			print("ERROR: sendMsg from GUI")
+			print("ERROR: sendMsg from GUI", sys.exc_info()[0], sys.exc_info()[1])
 
 
 	def recvMsg(self):
@@ -49,9 +53,13 @@ class chatGUI(Gtk.Window, Process, object):
 				if (self.notebook.get_current_page() == 0):
 					res = self.queue2.get()
 					if (res.header["alert"] == True):
-						self.update_friends_list()
+						self.update_friends_list(res)
+					elif (res.header["friends_list"] == True):
+						#do something with making friends list
 					else:
 						first_chat = self.chat_buf.get_end_iter()
+						
+						#change the string of the sending user from hardcode "Server: " to the actial name
 						self.chat_buf.insert(first_chat, "Server: " + res.data + "\n")
 				else:
 					oneEnd = self.interact_buf.get_end_iter()
@@ -79,6 +87,7 @@ class chatGUI(Gtk.Window, Process, object):
 
 
 	def quit(self, widget):
+		
 		self.queue1.put(gMessage(True, False, False, False, ""))
 		self.destroy()
 		Gtk.main_quit()
@@ -87,8 +96,12 @@ class chatGUI(Gtk.Window, Process, object):
 		first_in = self.interact_buf.get_start_iter()
 		last_in = self.interact_buf.get_end_iter()
 		self.interact_buf.delete(first_in, last_in)
-		self.interact_buf.place_cursor(first_in)		
+		self.interact_buf.place_cursor(first_in)
 
+	def on_friend_selected(self, selection):
+		model, iter = selection.get_selected()
+		self.selected_target = model[iter][0]
+		print(model[iter][0])
 
 	def setup_chat_page(self):
 		self.main_chat = Gtk.Grid(column_homogeneous = True, column_spacing = 5, 						row_spacing = 5)
@@ -134,6 +147,8 @@ class chatGUI(Gtk.Window, Process, object):
 		self.friends_list.append(list(("Sean", self.image)))
 		self.language_filter = self.friends_list.filter_new()
 		self.treeview = Gtk.TreeView.new_with_model(self.language_filter)
+		selection = self.treeview.get_selection()
+		selection.connect("changed", self.on_friend_selected)
 		
 		#create column headings/types
 		renderer = Gtk.CellRendererText()
@@ -191,10 +206,10 @@ class chatGUI(Gtk.Window, Process, object):
 		Process.__init__(self)
 		self.queue1 = queue1
 		self.queue2 = queue2
-		self.active_user = {"link": "/home/crypt4489/Documents/pyChatFiles/icons/Green.ico", "width": 16, "height": 16}
+		self.active_user = {"link": "./icons/Green.ico", "width": 16, "height": 16}
 
 
-		self.inactive_user = {"link": "/home/crypt4489/Documents/pyChatFiles/icons/red-dot.ico", "width": 24, "height": 24}
+		self.inactive_user = {"link": "./icons/red-dot.ico", "width": 24, "height": 24}
 		Gtk.Window.__init__(self, title="Drew Chat")
 		self.set_size_request(800, 600)
 		self.timeout_id = None
@@ -203,6 +218,7 @@ class chatGUI(Gtk.Window, Process, object):
 		self.add(self.notebook)
 		self.setup_chat_page()
 		self.setup_telnet_page()
+
 		self.notebook.append_page(self.main_chat, Gtk.Label("Chat"))
 		
 		self.notebook.append_page(self.page2, Gtk.Label("Telnet"))

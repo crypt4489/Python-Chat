@@ -2,6 +2,7 @@
 import time
 import io
 import threading
+import os
 import sys
 import select
 import pickle
@@ -9,7 +10,7 @@ import telnetlib
 from pyChatMessageClass import dMessage, gMessage
 from  multiprocessing import Process, JoinableQueue
 from io import BytesIO
-
+from cryptography.fernet import Fernet
 
 class Client(Process, object):
 
@@ -17,6 +18,7 @@ class Client(Process, object):
 
 	def sendMsg(self, data):
 		try:
+			print("send")
 			self.sock.sendall(data)
 		except:
 			print(str(sys.exc_info()[0]) + " SEND_MSG_CLIENT_CHAT")
@@ -24,7 +26,7 @@ class Client(Process, object):
 
 	def recvMsg(self):
 		try:
-			while True:
+			while self.recv_bool:
 				data = self.sock.recv(4096)
 				if not data:
 					break
@@ -32,6 +34,10 @@ class Client(Process, object):
 				self.queue1.put(message)
 		except:
 			print(str(sys.exc_info()[0]) + " RECV_MSG_CLIENT_CHAT")
+
+	def endConnection(self):
+		self.recv_bool = False
+		print("ending recv thread")
 
 	def tellie(self, tel_info):
 		try:
@@ -61,30 +67,42 @@ class Client(Process, object):
 
 
 	def cmd_tel(self, cmd):
-		
-		
 		self.tel_connect.write(cmd + "\n\r")
-		#ret_data = self.tel_connect.read_eager()
-		#self.queue1.put(dMessage(0, "", 0, 0, 0, "lol"))
 		
 
 	def end_tellie(self):
 		self.readThread.stop()
 		self.tel_connect.close()
+
+	def encrypt_pwd(self, pwd):
+		key = bytes(os.environ["key"], "utf-8").decode('unicode_escape')
+		f = Fernet(key)
+		return f.encrypt(pwd.encode())
+
+	def connect(self, address):
+		pwd = os.getenv("pwd")
+		e_pwd = self.encrypt_pwd(pwd)
+		self.sock.connect((address, 9000))
+		data = "{uname} {pwd} {token}".format(
+			uname= os.getenv("username"), 
+			pwd = e_pwd.decode('utf-8'), 				
+			token = os.getenv("token"))
+		self.sock.sendall(dMessage(1, None, 0, 0, 0, data).makePickle())
+		data = self.sock.recv(4096)	
+		print("Begin Chatting...")
+		self.recv_bool = True;
+		rThread = threading.Thread(target=self.recvMsg)
+		rThread.daemon = True
+		rThread.start()
+
+
+
 		
 	def __init__(self, address, target, queue1):
 		Process.__init__(self)
 		self.queue1 = queue1
-		self.sock.connect((address, 9000))
-		self.sock.sendall(dMessage(1, "UBUNTU!", 0, 0, 0, "UBUNTU!").makePickle())
-		"""print(str(self.sock.recv(1024)))
-		while(str(self.sock.recv(1024)) != "Send"):
-			pass
-		self.sock.sendall(target.encode('utf-8')) """
-		print("Begin Chatting...")
-		rThread = threading.Thread(target=self.recvMsg)
-		rThread.daemon = True
-		rThread.start()
+
+		self.connect(address)
 
 
 if __name__ == '__main__':
